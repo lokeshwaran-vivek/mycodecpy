@@ -1,0 +1,518 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String  @map("user_id")
+  type               String
+  provider           String
+  providerAccountId  String  @map("provider_account_id")
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+  oauth_token_secret String?
+  oauth_token        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         Int      @id @default(autoincrement())
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model User {
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  emailVerified     DateTime?
+  phoneVerified     Boolean   @default(false)
+  isProfileComplete Boolean   @default(false)
+
+  password  String
+  role      UserRole @default(USER)
+  phone     String?
+  address   String?
+  bio       String?
+  avatarUrl String?
+
+  designation String?
+  expertise   String?
+
+  status    Status   @default(ACTIVE)
+  type      UserType @default(BUSINESS)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hasResetPassword Boolean? @default(false)
+
+  // Relations
+  business            Business?            @relation("BusinessEmployees", fields: [businessId], references: [id])
+  businessId          String?
+  receivedInvitations BusinessInvitation[] @relation("InvitedUser")
+  sentInvitations     BusinessInvitation[] @relation("InvitingUser")
+  projects            Project[]            @relation("ProjectTeam")
+  createdProjects     Project[]            @relation("ProjectCreator")
+  messages            Message[]
+  Account             Account[]
+  Session             Session[]
+  uploadedFiles       TemplateFile[]
+  auditLogs           AuditLog[]
+  Notification        Notification[]
+  Analysis            Analysis[]
+  passwordReset       PasswordReset?
+  Client              Client[]
+}
+
+model Business {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  gst       String   @unique
+  cin       String?  @unique
+  website   String?
+  logo      String?
+  status    Status   @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  businessType BusinessType @default(PROPRIETOR_FIRM)
+
+  location        String?
+  establishedDate DateTime?
+
+  employeesSize String?
+
+  keyAchievements String?
+
+  ageOfTheOrganisation String?
+
+  attachments BusinessAttachment[]
+
+  verified Boolean @default(false)
+
+  // Relations
+  employees   User[]               @relation("BusinessEmployees")
+  invitations BusinessInvitation[]
+
+  clients        Client[]         @relation("BusinessClients")
+  BusinessClient BusinessClient[]
+
+  projects Project[]
+  Analysis Analysis[]
+
+  auditLogs AuditLog[]
+  Message   Message[]
+  Wallet    Wallet[]
+}
+
+enum BusinessType {
+  PROPRIETOR_FIRM
+  PARTNERSHIP_FIRM
+  CONSULTANCY_COMPANY
+}
+
+model BusinessAttachment {
+  id         String    @id @default(cuid())
+  name       String
+  url        String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  Business   Business? @relation(fields: [businessId], references: [id])
+  businessId String?
+}
+
+model Wallet {
+  id                String              @id @default(cuid())
+  complianceBalance Float               @default(0)
+  chatBalance       Float               @default(0)
+  businessId        String
+  business          Business            @relation(fields: [businessId], references: [id])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  WalletTransaction WalletTransaction[]
+}
+
+model WalletTransaction {
+  id        String          @id @default(cuid())
+  amount    Float
+  type      TransactionType
+  metadata  Json?
+  walletId  String
+  wallet    Wallet          @relation(fields: [walletId], references: [id])
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+}
+
+model BusinessInvitation {
+  id        String           @id @default(cuid())
+  status    InvitationStatus @default(PENDING)
+  role      UserRole
+  email     String
+  token     String           @unique
+  expiresAt DateTime
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  business      Business @relation(fields: [businessId], references: [id])
+  businessId    String
+  invitedUser   User?    @relation("InvitedUser", fields: [invitedUserId], references: [id])
+  invitedUserId String?
+  invitedBy     User     @relation("InvitingUser", fields: [invitedById], references: [id])
+  invitedById   String
+
+  @@unique([businessId, email])
+}
+
+model Client {
+  id    String @id @default(cuid())
+  code  String @unique
+  name  String
+  email String
+
+  class  ClientClass @default(PRIVATE)
+  status Status      @default(ACTIVE)
+
+  taxRegistrationNumber   String?
+  regulatoryLicenseNumber String?
+
+  clientRiskCategory String?
+
+  address String?
+
+  contactPersonName  String?
+  contactPersonEmail String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  createdBy   User?   @relation(fields: [createdById], references: [id])
+  createdById String?
+
+  projects       Project[]
+  business       Business?        @relation("BusinessClients", fields: [businessId], references: [id])
+  businessId     String?
+  BusinessClient BusinessClient[]
+}
+
+model BusinessClient {
+  id         String   @id @default(cuid())
+  business   Business @relation(fields: [businessId], references: [id])
+  businessId String
+  client     Client   @relation(fields: [clientId], references: [id])
+  clientId   String
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  code        String        @unique
+  description String?
+  status      ProjectStatus @default(IN_PROGRESS)
+  progress    Float         @default(0)
+
+  period String?
+  type   ProjectType @default(AUDIT_REVIEW_CORPORATE_LAW)
+  risk   String?
+
+  materiality String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  clientId    String
+  client      Client            @relation(fields: [clientId], references: [id])
+  createdById String
+  createdBy   User              @relation("ProjectCreator", fields: [createdById], references: [id])
+  team        User[]            @relation("ProjectTeam")
+  templates   ProjectTemplate[]
+  analyses    Analysis[]
+  messages    Message[]
+
+  // Business
+  Business   Business? @relation(fields: [businessId], references: [id])
+  businessId String?
+}
+
+enum ProjectType {
+  AUDIT_REVIEW_CORPORATE_LAW
+  AUDIT_REVIEW_TAX_LAW
+  AUDIT_REVIEW_LISTING_REGULATIONS
+  MANAGEMENT_AUDIT
+  OTHER_ASSURANCE_SERVICES
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  fields      Json[] // Array of field definitions with { id, name, required, description }
+  status      Status   @default(ACTIVE)
+  isRequired  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  projectTemplates ProjectTemplate[]
+}
+
+model ProjectTemplate {
+  id            String         @id @default(cuid())
+  status        TemplateStatus @default(PENDING)
+  fieldMappings Json? // Maps file headers to template fields
+  data          Json? // Data from the template file
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  projectId  String
+  project    Project        @relation(fields: [projectId], references: [id])
+  templateId String
+  template   Template       @relation(fields: [templateId], references: [id])
+  files      TemplateFile[]
+
+  @@unique([projectId, templateId])
+}
+
+model TemplateFile {
+  id         String     @id @default(cuid())
+  name       String
+  size       Int
+  status     FileStatus @default(PROCESSING)
+  uploadedAt DateTime   @default(now())
+
+  uploadedBy   User   @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+
+  // Relations
+  projectTemplateId String
+  projectTemplate   ProjectTemplate @relation(fields: [projectTemplateId], references: [id])
+}
+
+model ComplianceResult {
+  id        String         @id @default(cuid())
+  status    AnalysisStatus @default(IN_PROGRESS)
+  results   Json? // Detailed test results
+  summary   Json? // Summary statistics
+  config    Json? // Configuration for the test
+  threshold Int? // The threshold used for this run
+  startedAt DateTime       @default(now())
+  endedAt   DateTime?
+  errors    Json? // Store any error messages
+  testId    String
+
+  // Relations
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id])
+}
+
+model Analysis {
+  id        String         @id @default(cuid())
+  name      String
+  type      String
+  status    AnalysisStatus @default(IN_PROGRESS)
+  progress  Float          @default(0)
+  results   Json? // Analysis results including summary, fields, and rows
+  createdAt DateTime       @default(now())
+  lastRunAt DateTime?
+  updatedAt DateTime       @updatedAt
+
+  ranByUserId String?
+  ranByUser   User?   @relation(fields: [ranByUserId], references: [id])
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+
+  metadata Json?
+
+  // Relations
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  complianceResults ComplianceResult[]
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String      @db.Text
+  role      MessageRole
+  timestamp DateTime    @default(now())
+
+  metadata Json?
+
+  // Relations
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+}
+
+model FinancialYear {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id         String           @id @default(cuid())
+  action     AuditAction
+  userId     String
+  user       User             @relation(fields: [userId], references: [id])
+  message    String?
+  collection AuditCollection?
+  record     Json?
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum UserRole {
+  ADMIN
+  OWNER
+  USER
+}
+
+enum UserType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum ClientClass {
+  PRIVATE
+  PUBLIC_LISTED
+  PCAOB
+  OTHERS
+}
+
+enum Status {
+  ACTIVE
+  INVITED
+  INACTIVE
+}
+
+enum ProjectStatus {
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum TemplateStatus {
+  PENDING
+  UPLOADED
+  MAPPED
+  VERIFIED
+  REJECTED
+}
+
+enum FileStatus {
+  PROCESSING
+  SUCCESS
+  ERROR
+}
+
+enum AnalysisStatus {
+  QUEUED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum AuditCollection {
+  USER
+  BUSINESS
+  CLIENT
+  PROJECT
+  TEMPLATE
+  PROJECT_TEMPLATE
+  TEMPLATE_FILE
+  ANALYSIS
+  MESSAGE
+  BUSINESS_INVITATION
+  BUSINESS_CLIENT
+  BUSINESS_PROJECT
+}
